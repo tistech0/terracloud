@@ -16,5 +16,5 @@ jobs:
           fetch-depth: 0
       - uses: pixta-dev/repository-mirroring-action@v1
         with:
-          target_repo_url: git@github.com:EpitechMscProPromo2025/T-WEB-700-NAN_10.git
+          target_repo_url: git@github.com:EpitechMscProPromo2025/T-CLO-901-NAN_10.git
           ssh_private_key: ${{ secrets.SSH_KEY }}
