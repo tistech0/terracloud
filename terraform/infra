@@ -1,0 +1,52 @@
+Région : France Central (Paris)
+
+Réseau :
+1 VNet
+3 sous-réseaux
+3 NSGs
+
+Compute :
+2 VMs Ubuntu 20.04 LTS pour le front-end (taille recommandée : Standard_B2s)
+2 VMs Ubuntu 20.04 LTS pour le back-end (taille recommandée : Standard_B2s)
+1 VM Ubuntu 20.04 LTS pour la base de données (taille recommandée : Standard_D2s_v3)
+
+Stockage :
+Disques managés Premium SSD pour toutes les VMs
+1 compte de stockage pour les diagnostics et les sauvegardes
+
+Équilibrage de charge :
+1 Azure Load Balancer Standard pour le front-end
+1 Azure Load Balancer Standard pour le back-end
+
+NSGs :
+1 NSG pour le sous-réseau front-end
+1 NSG pour le sous-réseau back-end
+1 NSG pour le sous-réseau base de données
+
+
+Règles NSG strictes :
+a. Sous-réseau front-end :
+Autoriser le trafic HTTP/HTTPS entrant depuis Internet
+Autoriser le trafic SSH entrant uniquement depuis des adresses IP spécifiques (vos adresses IP de gestion)
+Autoriser le trafic sortant vers le sous-réseau back-end
+
+b. Sous-réseau back-end :
+Bloquer tout trafic entrant d'Internet
+Autoriser le trafic entrant depuis le sous-réseau front-end
+Autoriser le trafic SSH entrant uniquement depuis des adresses IP spécifiques
+Autoriser le trafic sortant vers le sous-réseau de base de données
+
+c. Sous-réseau base de données :
+Bloquer tout trafic entrant d'Internet
+Autoriser le trafic entrant depuis le sous-réseau back-end
+Autoriser le trafic SSH entrant uniquement depuis des adresses IP spécifiques
+
+Sécurité supplémentaire :
+Utiliser des clés SSH pour l'authentification au lieu de mots de passe
+Désactiver l'accès par mot de passe sur toutes les VMs
+
+Cette approche avec des règles NSG strictes offre plusieurs avantages :
+Sécurité renforcée en limitant l'exposition des VMs à Internet
+Contrôle granulaire du trafic entre les différentes couches de l'application
+Simplicité de gestion par rapport à une solution de bastion
+Coût réduit, car vous n'avez pas besoin de ressources supplémentaires pour la gestion de l'accès
