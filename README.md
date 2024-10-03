@@ -1,5 +1,5 @@
 # Terracloud
-Comment ce connecter au vm
+Comment se connecter au vm
 
 Lancer le tunnel bastion pour accéder aux vm:
 az login

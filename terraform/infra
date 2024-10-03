@@ -49,4 +49,4 @@ Cette approche avec des règles NSG strictes offre plusieurs avantages :
 Sécurité renforcée en limitant l'exposition des VMs à Internet
 Contrôle granulaire du trafic entre les différentes couches de l'application
 Simplicité de gestion par rapport à une solution de bastion
-Coût réduit, car vous n'avez pas besoin de ressources supplémentaires pour la gestion de l'accès
+Coût réduit
