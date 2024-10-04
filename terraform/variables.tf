@@ -55,13 +55,13 @@ variable "ssh_public_key" {
 variable "frontend_vm_count" {
   type        = number
   description = "Number of frontend VMs to create"
-  default     = 2
+  default     = 1
 }
 
 variable "backend_vm_count" {
   type        = number
   description = "Number of backend VMs to create"
-  default     = 2
+  default     = 1
 }
 
 variable "vm_size" {
