@@ -1,29 +1,23 @@
-output "frontend_vm_ids" {
-  description = "The IDs of the frontend VMs"
-  value       = azurerm_linux_virtual_machine.frontend_vm[*].id
+output "vm_name" {
+  value = azurerm_dev_test_linux_virtual_machine.vm.name
 }
 
-output "backend_vm_ids" {
-  description = "The IDs of the backend VMs"
-  value       = azurerm_linux_virtual_machine.backend_vm[*].id
+output "vm_fqdn" {
+  value = azurerm_dev_test_linux_virtual_machine.vm.fqdn
 }
 
-output "database_vm_id" {
-  description = "The ID of the database VM"
-  value       = azurerm_linux_virtual_machine.database_vm.id
+output "vm_unique_identifier" {
+  value = azurerm_dev_test_linux_virtual_machine.vm.unique_identifier
 }
 
-output "frontend_nic_ids" {
-  description = "The IDs of the frontend NICs"
-  value       = azurerm_network_interface.frontend_nic[*].id
+output "vm_id" {
+  value = azurerm_dev_test_linux_virtual_machine.vm.id
 }
 
-output "backend_nic_ids" {
-  description = "The IDs of the backend NICs"
-  value       = azurerm_network_interface.backend_nic[*].id
+output "resource_group_name" {
+  value = var.lab_resource_group_name
 }
 
-output "database_nic_id" {
-  description = "The ID of the database NIC"
-  value       = azurerm_network_interface.database_nic.id
+output "lab_name" {
+  value = var.lab_name
 }

@@ -1,23 +1,23 @@
+output "vm_names" {
+  value = [module.vm1.vm_name]
+}
+
+output "vm_fqdns" {
+  value = [module.vm1.vm_fqdn]
+}
+
+output "vm_unique_identifiers" {
+  value = [module.vm1.vm_unique_identifier]
+}
+
+output "vm_ids" {
+  value = [module.vm1.vm_id]
+}
+
 output "resource_group_name" {
-  value = azurerm_resource_group.rg.name
+  value = module.vm1.resource_group_name
 }
 
-output "vnet_id" {
-  value = module.networking.vnet_id
-}
-
-output "frontend_lb_public_ip" {
-  value = module.load_balancers.frontend_lb_ip
-}
-
-output "bastion_public_ip" {
-  value = module.bastion.bastion_public_ip
-}
-
-output "frontend_vm_ids" {
-  value = module.compute.frontend_vm_ids
-}
-
-output "backend_vm_ids" {
-  value = module.compute.backend_vm_ids
+output "lab_name" {
+  value = module.vm1.lab_name
 }

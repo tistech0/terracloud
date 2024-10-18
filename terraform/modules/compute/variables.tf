@@ -1,43 +1,24 @@
-variable "resource_group_name" {
-  description = "The name of the resource group"
+variable "name" {
+  description = "Name of the VM"
   type        = string
 }
 
-variable "location" {
-  description = "The Azure region where resources will be created"
+variable "lab_name" {
+  description = "Name of the DevTest Lab"
   type        = string
 }
 
-variable "subnet_ids" {
-  description = "Map of subnet names to subnet IDs"
-  type        = map(string)
-}
-
-variable "frontend_vm_count" {
-  description = "Number of frontend VMs to create"
-  type        = number
-  default     = 2
-}
-
-variable "backend_vm_count" {
-  description = "Number of backend VMs to create"
-  type        = number
-  default     = 2
-}
-
-variable "vm_size" {
-  description = "The size of the virtual machines"
+variable "lab_resource_group_name" {
+  description = "Resource group name of the DevTest Lab"
   type        = string
-  default     = "Standard_B1ls"
 }
 
-variable "admin_username" {
-  description = "The admin username for the VMs"
+variable "lab_virtual_network_id" {
+  description = "ID of the lab's virtual network"
   type        = string
-  default     = "adminuser"
 }
 
-variable "ssh_public_key" {
-  description = "The public SSH key for the VMs"
+variable "lab_subnet_name" {
+  description = "Name of the subnet in the lab's virtual network"
   type        = string
 }
