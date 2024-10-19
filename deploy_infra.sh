@@ -3,6 +3,8 @@
 # Enregistrer le temps de début
 start_time=$(date +%s)
 
+# Définir l'utilisateur Ansible
+ansibleUser="azureuser"
 # Fonction pour afficher des messages en couleur
 print_color() {
     local color=$1
@@ -32,16 +34,17 @@ fi
 # Extraire les valeurs requises de la sortie Terraform
 LAB_RESOURCE_GROUP=$(terraform output -raw resource_group_name)
 LAB_NAME=$(terraform output -raw lab_name)
-VM_NAME=$(terraform output -json vm_names | jq -r '.[0]')
-VM_FQDN=$(terraform output -json vm_fqdns | jq -r '.[0]')
+VM_NAMES=$(terraform output -json vm_names | jq -r '.[]')
+VM_FQDNS=$(terraform output -json vm_fqdns | jq -r '.[]')
 
 # Définir le groupe de ressources "items"
 ITEMS_RESOURCE_GROUP="${LAB_RESOURCE_GROUP}-items"
 
 # Fonction pour obtenir l'adresse IP publique
 get_public_ip() {
-    local ip_name="${VM_NAME}"
-    print_color "blue" "Recherche de l'adresse IP publique..."
+    local vm_name=$1
+    local ip_name="${vm_name}"
+    print_color "blue" "Recherche de l'adresse IP publique pour $vm_name..."
     
     IP_ADDRESS=$(az network public-ip show --resource-group "$ITEMS_RESOURCE_GROUP" --name "$ip_name" --query ipAddress -o tsv 2>/dev/null)
     
@@ -49,82 +52,104 @@ get_public_ip() {
         echo "$IP_ADDRESS"
         return 0
     else
-        print_color "yellow" "Adresse IP publique non trouvée"
+        print_color "yellow" "Adresse IP publique non trouvée pour $vm_name"
         return 1
     fi
 }
 
 # Fonction pour revendiquer la VM
 claim_vm() {
-    print_color "blue" "Tentative de revendication de la VM..."
-    CLAIM_RESULT=$(az lab vm claim --resource-group "$LAB_RESOURCE_GROUP" --lab-name "$LAB_NAME" --name "$VM_NAME" -o json 2>&1)
+    local vm_name=$1
+    print_color "blue" "Tentative de revendication de la VM $vm_name..."
+    CLAIM_RESULT=$(az lab vm claim --resource-group "$LAB_RESOURCE_GROUP" --lab-name "$LAB_NAME" --name "$vm_name" -o json 2>&1)
     
     if [ $? -eq 0 ]; then
-        print_color "blue" "VM revendiquée avec succès."
+        print_color "blue" "VM $vm_name revendiquée avec succès."
         return 0
     else
-        print_color "yellow" "Échec de la revendication de la VM. Erreur : $CLAIM_RESULT"
+        print_color "yellow" "Échec de la revendication de la VM $vm_name. Erreur : $CLAIM_RESULT"
         return 1
     fi
 }
 
-# Tenter de revendiquer la VM
-claim_vm
-
-# Obtenir l'adresse IP publique
-PUBLIC_IP=$(get_public_ip)
-
 # Créer le fichier d'inventaire Ansible
 mkdir -p ../ansible
-if [ -n "$PUBLIC_IP" ]; then
-    cat << EOF > ../ansible/inventory.ini
-[docker_hosts]
-$VM_NAME ansible_host=$PUBLIC_IP
+echo "[docker_hosts]" > ../ansible/inventory.ini
+echo "[db_servers]" >> ../ansible/inventory.ini
+echo "[front]" >> ../ansible/inventory.ini
+echo "[back]" >> ../ansible/inventory.ini
+
+# Pour chaque VM
+i=0
+for VM_NAME in $VM_NAMES; do
+    # Tenter de revendiquer la VM
+    claim_vm "$VM_NAME"
+
+    # Obtenir l'adresse IP publique
+    PUBLIC_IP=$(get_public_ip "$VM_NAME")
+
+    # Ajouter la VM au fichier d'inventaire
+    if [ -n "$PUBLIC_IP" ]; then
+        echo "$VM_NAME ansible_host=$PUBLIC_IP" >> ../ansible/inventory.ini.tmp
+        if [[ $VM_NAME == *"bdd"* ]]; then
+            sed -i "/\[db_servers\]/a $VM_NAME ansible_host=$PUBLIC_IP" ../ansible/inventory.ini
+        elif [[ $VM_NAME == *"back"* ]]; then
+            sed -i "/\[back\]/a $VM_NAME ansible_host=$PUBLIC_IP" ../ansible/inventory.ini
+        elif [[ $VM_NAME == *"front"* ]]; then
+            sed -i "/\[front\]/a $VM_NAME ansible_host=$PUBLIC_IP" ../ansible/inventory.ini
+        fi
+        sed -i "/\[docker_hosts\]/a $VM_NAME ansible_host=$PUBLIC_IP" ../ansible/inventory.ini
+    else
+        print_color "yellow" "Impossible d'ajouter $VM_NAME à l'inventaire car ni l'IP publique ni le FQDN ne sont disponibles."
+    fi
+
+    i=$((i+1))
+done
+
+# Ajouter les variables globales à l'inventaire
+cat << EOF >> ../ansible/inventory.ini
 
 [all:vars]
-ansible_user=azureuser
+ansible_user=$ansibleUser
 ansible_ssh_private_key_file=~/.ssh/id_rsa
 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 EOF
-    print_color "blue" "Le fichier d'inventaire Ansible 'inventory.ini' a été créé avec l'adresse IP publique."
-elif [ -n "$VM_FQDN" ]; then
-    cat << EOF > ../ansible/inventory.ini
-[docker_hosts]
-$VM_NAME ansible_host=$VM_FQDN
 
-[all:vars]
-ansible_user=azureuser
-ansible_ssh_private_key_file=~/.ssh/id_rsa
-ansible_ssh_common_args='-o StrictHostKeyChecking=no'
-EOF
-    print_color "blue" "Le fichier d'inventaire Ansible 'inventory.ini' a été créé avec le FQDN."
-else
-    print_color "yellow" "Impossible de créer le fichier inventory.ini car ni l'IP publique ni le FQDN ne sont disponibles."
-fi
+print_color "blue" "Le fichier d'inventaire Ansible 'inventory.ini' a été créé."
 
-# Exécuter le playbook Ansible
+# Exécuter les playbooks Ansible
 print_color "blue" "Exécution du playbook Ansible install_docker..."
 cd ../ansible
 ansible-playbook -i inventory.ini install_docker.yml -v
 
+print_color "blue" "Exécution du playbook Ansible install_secure_postgres..."
+ansible-playbook -i inventory.ini install_secure_postgres.yml -v
+
 # Vérifier si l'exécution d'Ansible a réussi
 if [ $? -eq 0 ]; then
-    print_color "blue" "Le playbook Ansible a été exécuté avec succès."
+    print_color "blue" "Les playbooks Ansible ont été exécutés avec succès."
 else
-    print_color "red" "Erreur lors de l'exécution du playbook Ansible."
+    print_color "red" "Erreur lors de l'exécution des playbooks Ansible."
 fi
 
 # Revenir au répertoire initial
 cd ..
 
-
 # Afficher les informations finales
 print_color "green" "----------------------------------------"
-print_color "green" "Adresse IP publique : $PUBLIC_IP"
+i=0
+for VM_NAME in $VM_NAMES; do
+    PUBLIC_IP=$(get_public_ip "$VM_NAME")
+    VM_FQDN=$(echo $VM_FQDNS | cut -d' ' -f$((i+1)))
+    print_color "green" "VM : $VM_NAME"
+    print_color "green" "Adresse IP publique : $PUBLIC_IP"
+    print_color "green" "FQDN : $VM_FQDN"
+    print_color "green" "----------------------------------------"
+    i=$((i+1))
+done
 print_color "green" "Nom du Lab : $LAB_NAME"
 print_color "green" "Groupe de ressources du Lab : $LAB_RESOURCE_GROUP"
 print_color "green" "Groupe de ressources des items : $ITEMS_RESOURCE_GROUP"
-print_color "green" "Nom de la VM : $VM_NAME"
 print_color "green" "----------------------------------------"
 
 # Calculer et afficher le temps d'exécution
