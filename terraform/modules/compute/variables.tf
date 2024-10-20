@@ -22,3 +22,14 @@ variable "lab_subnet_name" {
   description = "Name of the subnet in the lab's virtual network"
   type        = string
 }
+
+variable "ssh_user" {
+  description = "SSH user to use for the VM"
+  type        = string
+}
+
+variable "ssh_key" {
+  description = "SSH key to use for the VM"
+  type        = string
+}
+

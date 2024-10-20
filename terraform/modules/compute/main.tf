@@ -5,14 +5,13 @@ resource "azurerm_dev_test_linux_virtual_machine" "vm" {
   location                   = "westeurope"
 
   size                       = "Standard_A4_v2"
-  username                   = "azureuser"
-  ssh_key                    = file("~/.ssh/id_rsa.pub")
+  username                   = var.ssh_user
+  ssh_key                    = file(var.ssh_key)
 
   lab_virtual_network_id     = var.lab_virtual_network_id
   lab_subnet_name            = var.lab_subnet_name
 
   disallow_public_ip_address = false
-  allow_claim = true
   
   storage_type               = "Standard"
   notes                      = "Ubuntu 22.04 LTS VM created with Terraform module"
