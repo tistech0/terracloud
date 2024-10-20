@@ -4,7 +4,7 @@
 start_time=$(date +%s)
 
 # Définir l'utilisateur Ansible
-ansibleUser="azureuser"
+ansibleUser="AnsibleUser"
 # Fonction pour afficher des messages en couleur
 print_color() {
     local color=$1
@@ -17,6 +17,15 @@ print_color() {
         *) echo "$message" >&2 ;;
     esac
 }
+
+# Prompt for vault password
+print_color "yellow" "Please enter the Ansible Vault password:"
+read -s VAULT_PASS
+echo
+
+# Create a temporary vault password file
+VAULT_PASS_FILE=$(mktemp)
+echo "$VAULT_PASS" > "$VAULT_PASS_FILE"
 
 # Aller dans le dossier Terraform
 cd terraform || { print_color "red" "Erreur: Le dossier terraform n'existe pas."; exit 1; }
@@ -75,7 +84,7 @@ claim_vm() {
 # Créer le fichier d'inventaire Ansible
 mkdir -p ../ansible
 echo "[docker_hosts]" > ../ansible/inventory.ini
-echo "[db_servers]" >> ../ansible/inventory.ini
+echo "[db_monitoring_servers]" >> ../ansible/inventory.ini
 echo "[front]" >> ../ansible/inventory.ini
 echo "[back]" >> ../ansible/inventory.ini
 
@@ -92,7 +101,7 @@ for VM_NAME in $VM_NAMES; do
     if [ -n "$PUBLIC_IP" ]; then
         echo "$VM_NAME ansible_host=$PUBLIC_IP" >> ../ansible/inventory.ini.tmp
         if [[ $VM_NAME == *"bdd"* ]]; then
-            sed -i "/\[db_servers\]/a $VM_NAME ansible_host=$PUBLIC_IP" ../ansible/inventory.ini
+            sed -i "/\[db_monitoring_servers\]/a $VM_NAME ansible_host=$PUBLIC_IP" ../ansible/inventory.ini
         elif [[ $VM_NAME == *"back"* ]]; then
             sed -i "/\[back\]/a $VM_NAME ansible_host=$PUBLIC_IP" ../ansible/inventory.ini
         elif [[ $VM_NAME == *"front"* ]]; then
@@ -118,12 +127,25 @@ EOF
 print_color "blue" "Le fichier d'inventaire Ansible 'inventory.ini' a été créé."
 
 # Exécuter les playbooks Ansible
-print_color "blue" "Exécution du playbook Ansible install_docker..."
 cd ../ansible
-ansible-playbook -i inventory.ini install_docker.yml -v
 
-print_color "blue" "Exécution du playbook Ansible install_secure_postgres..."
-ansible-playbook -i inventory.ini install_secure_postgres.yml -v
+ansible-galaxy collection install community.grafana
+
+# Function to run Ansible playbook with vault password
+run_playbook() {
+    local playbook=$1
+    print_color "blue" "Executing Ansible playbook $playbook..."
+    ansible-playbook -i inventory.ini "$playbook" --vault-password-file="$VAULT_PASS_FILE" -v
+}
+
+# Execute Ansible playbooks
+run_playbook "install_docker.yml"
+run_playbook "install_secure_postgres.yml"
+run_playbook "install_prometheus.yml"
+run_playbook "install_grafana.yml"
+
+# Remove the temporary vault password file
+rm -f "$VAULT_PASS_FILE"
 
 # Vérifier si l'exécution d'Ansible a réussi
 if [ $? -eq 0 ]; then
@@ -144,6 +166,9 @@ for VM_NAME in $VM_NAMES; do
     print_color "green" "VM : $VM_NAME"
     print_color "green" "Adresse IP publique : $PUBLIC_IP"
     print_color "green" "FQDN : $VM_FQDN"
+    if [[ $VM_NAME == *"bdd"* ]]; then
+        print_color "green" "Url Grafana : http://$PUBLIC_IP:3000"
+    fi
     print_color "green" "----------------------------------------"
     i=$((i+1))
 done

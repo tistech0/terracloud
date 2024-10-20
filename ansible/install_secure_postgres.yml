@@ -4,11 +4,15 @@
   gather_facts: yes
 
 - name: Installer et sécuriser PostgreSQL
-  hosts: db_servers
+  hosts: db_monitoring_servers
   become: yes
   vars:
     postgresql_version: 12
     postgresql_port: 5432
+    ssh_port: 22
+    grafana_port: 3000
+    node_exporter_port: 9100
+    prometheus_port: 9090
     backend_ip: "{{ hostvars['ubuntu-vm-nts-0-back']['ansible_host'] }}"
   tasks:
     - name: Vérifier si l'hôte 'back' existe
@@ -63,6 +67,31 @@
       apt:
         name: ufw
         state: present
+
+    - name: Configurer UFW pour autoriser le trafic SSH
+      ufw:
+        rule: allow
+        port: "{{ ssh_port }}"
+        proto: tcp
+        #TODO ajouter une white list des ips autorisées
+
+    - name: Configurer UFW pour autoriser le trafic Grafana
+      ufw:
+        rule: allow
+        port: "{{ grafana_port }}"
+        proto: tcp
+
+    - name: Configurer UFW pour autoriser le trafic Node Exporter
+      ufw:
+        rule: allow
+        port: "{{ node_exporter_port }}"
+        proto: tcp
+
+    - name: Configurer UFW pour autoriser le trafic Prometheus
+      ufw:
+        rule: allow
+        port: "{{ prometheus_port }}"
+        proto: tcp
 
     - name: Configurer UFW pour autoriser uniquement le trafic PostgreSQL depuis le back-end
       ufw:
