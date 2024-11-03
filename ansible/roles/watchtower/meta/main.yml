@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: Tistech0
+  description: Role to install and configure Watchtower for Docker container updates
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+  galaxy_tags:
+    - docker
+    - watchtower
+    - deployment
+    - containers
+
+dependencies:
+  - role: docker

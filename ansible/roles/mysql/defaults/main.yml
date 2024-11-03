@@ -1,0 +1,53 @@
+---
+# MySQL version and packages
+mysql_version: "8.0"
+mysql_packages:
+  - mysql-server
+  - mysql-client
+  - python3-mysqldb
+
+# MySQL Configuration
+mysql_port: 3306
+mysql_bind_address: "127.0.0.1"
+mysql_max_connections: "{{ (ansible_memtotal_mb * 0.1) | int }}"
+mysql_innodb_buffer_pool_size: "{{ (ansible_memtotal_mb * 0.5) | int }}M"
+
+# UFW rules
+mysql_ufw_rules:
+  - port: "{{ mysql_port }}"
+    proto: tcp
+    from_ip: "{{ hostvars[groups['application_hosts'][0]]['ansible_host'] | default('any') }}"
+
+# MySQL Configuration Options
+mysql_slow_query_log: 1
+mysql_long_query_time: 10
+mysql_innodb_log_file_size: "64M"
+mysql_innodb_flush_log_at_trx_commit: 1
+mysql_innodb_flush_method: "O_DIRECT"
+mysql_max_allowed_packet: "16M"
+mysql_thread_cache_size: 8
+mysql_table_open_cache: 4000
+mysql_character_set_server: "utf8mb4"
+mysql_collation_server: "utf8mb4_general_ci"
+
+# Secure installation options
+mysql_secure_installation:
+  remove_anonymous_user: true
+  remove_test_database: true
+  disallow_root_login_remotely: true
+  set_root_password: true
+
+# Root access configuration
+mysql_root_hosts:
+  - 'localhost'
+  - '127.0.0.1'
+  - '::1'
+
+# Ajouter ces variables :
+mysql_root_user: root
+mysql_socket: /var/run/mysqld/mysqld.sock
+mysql_config_file: ~/.my.cnf
+
+# Paramètres de log
+mysql_log_error: /var/log/mysql/error.log
+mysql_slow_query_log_file: /var/log/mysql/mysql-slow.log

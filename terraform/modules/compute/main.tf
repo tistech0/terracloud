@@ -12,6 +12,7 @@ resource "azurerm_dev_test_linux_virtual_machine" "vm" {
   lab_subnet_name            = var.lab_subnet_name
 
   disallow_public_ip_address = false
+  allow_claim = true
   
   storage_type               = "Standard"
   notes                      = "Ubuntu 22.04 LTS VM created with Terraform module"

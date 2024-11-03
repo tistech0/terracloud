@@ -1,0 +1,15 @@
+---
+- hosts: global_hosts
+  become: yes
+  roles:
+    - role: docker
+
+  post_tasks:
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Display Docker version
+      debug:
+        var: docker_version.stdout

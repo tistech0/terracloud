@@ -1,0 +1,51 @@
+---
+- name: Verify required variables are defined
+  assert:
+    that:
+      - docker_user is defined
+      - docker_package_name is defined
+    msg: "Required variables must be defined in inventory"
+
+- name: Install Docker dependencies
+  apt:
+    name: "{{ docker_dependencies }}"
+    state: present
+    update_cache: yes
+
+- name: Add Docker GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+    id: "{{ docker_apt_key_fingerprint }}"
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "{{ docker_repo }}"
+    state: present
+
+- name: Install Docker
+  apt:
+    name: "{{ docker_package_name }}"
+    state: present
+  notify: Restart Docker
+
+- name: Configure Docker daemon
+  copy:
+    content: "{{ docker_daemon_config | to_nice_json }}"
+    dest: /etc/docker/daemon.json
+    mode: '0640'
+  when: docker_daemon_config | length > 0
+  notify: Restart Docker
+
+- name: Ensure Docker service is running and enabled
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add users to docker group
+  user:
+    name: "{{ item }}"
+    groups: docker
+    append: yes
+  loop: "{{ docker_users }}"

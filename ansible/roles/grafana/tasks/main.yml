@@ -1,0 +1,310 @@
+---
+# Vérification des prérequis
+- name: Verify prerequisites
+  block:
+    - name: Verify required variables
+      assert:
+        that:
+          - grafana_admin_user is defined
+          - grafana_admin_password is defined
+        msg: "Required variables must be defined"
+
+    - name: Check Prometheus availability
+      uri:
+        url: "{{ prometheus_url }}/api/v1/status/config"
+        method: GET
+        status_code: 200
+      register: prometheus_check
+      until: prometheus_check.status == 200
+      retries: 6
+      delay: 10
+      ignore_errors: yes
+
+    - name: Check Grafana version
+      command: grafana-server -v
+      register: grafana_version_check
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display Grafana version
+      debug:
+        msg: "Grafana version: {{ grafana_version_check.stdout }}"
+      when: grafana_version_check.rc == 0
+  tags:
+    - grafana_prereq
+
+# Dans main.yml
+- name: Verify Prometheus connections
+  block:
+    - name: Test Local Prometheus
+      uri:
+        url: "http://localhost:{{ prometheus_port }}/api/v1/query?query=up"
+        method: GET
+        status_code: 200
+      register: local_prometheus_test
+      ignore_errors: yes
+
+    - name: Test Application Prometheus
+      uri:
+        url: "http://{{ hostvars[groups['application_hosts'][0]]['ansible_host'] }}:{{ prometheus_port }}/api/v1/query?query=up"
+        method: GET
+        status_code: 200
+      register: app_prometheus_test
+      ignore_errors: yes
+
+    - name: Test BDD Prometheus
+      uri:
+        url: "http://{{ hostvars[groups['bdd_hosts'][0]]['ansible_host'] }}:{{ prometheus_port }}/api/v1/query?query=up"
+        method: GET
+        status_code: 200
+      register: bdd_prometheus_test
+      ignore_errors: yes
+
+    - name: Display Prometheus connection test results
+      debug:
+        msg: 
+          - "Local Prometheus: {{ local_prometheus_test.status | default('Failed') }}"
+          - "Application Prometheus: {{ app_prometheus_test.status | default('Failed') }}"
+          - "BDD Prometheus: {{ bdd_prometheus_test.status | default('Failed') }}"
+  tags:
+    - prometheus_test
+
+# Installation
+- name: Install Grafana
+  block:
+    - name: Add Grafana GPG key
+      apt_key:
+        url: https://packages.grafana.com/gpg.key
+        state: present
+
+    - name: Add Grafana repository
+      apt_repository:
+        repo: deb https://packages.grafana.com/oss/deb stable main
+        state: present
+        filename: grafana
+
+    - name: Install Grafana package
+      apt:
+        name: "grafana={{ grafana_version }}"
+        update_cache: yes
+        state: present
+  tags:
+    - grafana_install
+
+- name: Verify Grafana installation files
+  block:
+    - name: Check if deb package is installed
+      stat:
+        path: /usr/share/grafana/public
+      register: grafana_public_dir
+
+    - name: Create required Grafana directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0755'
+      loop:
+        - /usr/share/grafana
+        - /usr/share/grafana/conf
+        - /usr/share/grafana/public
+        - "{{ grafana_data_dir }}"
+        - "{{ grafana_logs_dir }}"
+        - "{{ grafana_plugins_dir }}"
+        - "{{ grafana_provisioning_dir }}"
+        - "{{ grafana_pid_file_dir }}"
+
+    - name: Extract Grafana public files
+      unarchive:
+        src: /usr/share/grafana/public.tar.gz
+        dest: /usr/share/grafana
+        remote_src: yes
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+      when: not grafana_public_dir.stat.exists
+      ignore_errors: yes
+
+    - name: Ensure conf directory exists
+      file:
+        path: /usr/share/grafana/conf
+        state: directory
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0755'
+
+    - name: Copy Grafana default configuration
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        remote_src: yes
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0644'
+      loop:
+        - { src: '/usr/share/grafana/conf/defaults.ini', dest: '/usr/share/grafana/conf/defaults.ini' }
+        - { src: '/usr/share/grafana/conf/sample.ini', dest: '/usr/share/grafana/conf/sample.ini' }
+      ignore_errors: yes
+
+# Configuration
+- name: Configure Grafana
+  block:
+    - name: Ensure Grafana home directory exists
+      file:
+        path: /usr/share/grafana
+        state: directory
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0755'
+
+    - name: Verify Grafana installation directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0755'
+      loop:
+        - /usr/share/grafana
+        - /usr/share/grafana/conf
+        - /usr/share/grafana/public
+        - "{{ grafana_data_dir }}"
+        - "{{ grafana_logs_dir }}"
+        - "{{ grafana_plugins_dir }}"
+        - "{{ grafana_provisioning_dir }}"
+        - "{{ grafana_pid_file_dir }}"
+
+    - name: Copy default configuration files
+      copy:
+        src: "/usr/share/grafana/conf/defaults.ini"
+        dest: "/usr/share/grafana/conf/defaults.ini"
+        remote_src: yes
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0644'
+      ignore_errors: yes
+
+    - name: Configure Grafana server
+      template:
+        src: grafana.ini.j2
+        dest: "{{ grafana_config_dir }}/grafana.ini"
+        owner: "root"
+        group: "{{ grafana_system_group }}"
+        mode: '0640'
+      notify: Restart Grafana
+  tags:
+    - grafana_config
+
+# Service Configuration
+- name: Configure Grafana Service
+  block:
+    - name: Setup Grafana systemd service
+      template:
+        src: grafana.service.j2
+        dest: /etc/systemd/system/grafana-server.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart Grafana
+
+    - name: Create Grafana PID directory
+      file:
+        path: "{{ grafana_pid_file_dir }}"
+        state: directory
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0755'
+
+    - name: Configure UFW rules
+      ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        from_ip: "{{ item.from_ip | default(omit) }}"
+      loop: "{{ grafana_ufw_rules }}"
+
+    - name: Ensure Grafana service is running
+      systemd:
+        name: grafana-server
+        state: started
+        enabled: yes
+        daemon_reload: yes
+  tags:
+    - grafana_service
+
+- name: Fix permissions recursively
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ grafana_system_user }}"
+    group: "{{ grafana_system_group }}"
+    mode: '0755'
+    recurse: yes
+  loop:
+    - /usr/share/grafana
+    - "{{ grafana_data_dir }}"
+    - "{{ grafana_logs_dir }}"
+    - "{{ grafana_plugins_dir }}"
+    - "{{ grafana_provisioning_dir }}"
+
+- name: Check service status after configuration
+  command: systemctl status grafana-server
+  register: service_status
+  changed_when: false
+  ignore_errors: yes
+
+- name: Display service status
+  debug:
+    var: service_status.stdout_lines
+  when: service_status is defined
+
+# Grafana Setup
+- name: Configure Grafana Components
+  block:
+    - name: Wait for Grafana API
+      uri:
+        url: "{{ grafana_url }}/api/health"
+        method: GET
+        user: "{{ grafana_admin_user }}"
+        password: "{{ grafana_admin_password }}"
+        force_basic_auth: yes
+        status_code: 200
+      register: grafana_api_check
+      until: grafana_api_check.status == 200
+      retries: 12
+      delay: 5
+
+    - name: Ensure provisioning directories exist
+      file:
+        path: "{{ grafana_provisioning_dir }}/{{ item }}"
+        state: directory
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0755'
+      loop:
+        - datasources
+        - dashboards
+
+    - name: Configure datasource provisioning
+      template:
+        src: datasources.yml.j2
+        dest: "{{ grafana_provisioning_dir }}/datasources/prometheus.yml"
+        owner: "{{ grafana_system_user }}"
+        group: "{{ grafana_system_group }}"
+        mode: '0640'
+      notify: Restart Grafana
+
+    - name: Import Grafana dashboards
+      community.grafana.grafana_dashboard:
+        grafana_url: "{{ grafana_url }}"
+        grafana_user: "{{ grafana_admin_user }}"
+        grafana_password: "{{ grafana_admin_password }}"
+        org_id: 1
+        dashboard_id: "{{ item.dashboard_id }}"
+        dashboard_revision: "{{ item.revision_id }}"
+        overwrite: yes
+      loop: "{{ grafana_dashboards }}"
+      register: dashboard_import
+      ignore_errors: yes
+  tags:
+    - grafana_setup

@@ -1,0 +1,8 @@
+---
+- hosts: application_hosts
+  become: yes
+  roles:
+    - role: watchtower
+      vars:
+        watchtower_interval: 30
+        watched_repo: "tistech0/countersepitechapp:latest"

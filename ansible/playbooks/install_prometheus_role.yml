@@ -1,0 +1,5 @@
+---
+- hosts: global_hosts
+  become: yes
+  roles:
+    - role: prometheus

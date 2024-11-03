@@ -1,0 +1,28 @@
+---
+- hosts: bdd_hosts
+  become: yes
+  vars_files:
+    - ../group_vars/all/vault.yml
+  roles:
+    - role: mysql
+      vars:
+        mysql_root_password: "{{ vault_mysql_root_pass }}"
+        mysql_databases:
+          - name: myapp
+            collation: utf8mb4_general_ci
+            encoding: utf8mb4
+        mysql_users:
+          - name: "{{ mysql_user }}"
+            password: "{{ vault_mysql_app_pass }}"
+            priv: "myapp.*:ALL"
+            host: "{{ hostvars[groups['application_hosts'][0]]['ansible_host'] }}"
+  
+  post_tasks:
+    - name: Verify MySQL is running and accessible
+      mysql_info:
+        login_user: "{{ mysql_root_user }}"
+        login_password: "{{ vault_mysql_root_pass }}"
+      register: mysql_status
+      ignore_errors: yes
+  tags:
+    - mysql

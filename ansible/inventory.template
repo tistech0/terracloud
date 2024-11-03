@@ -1,0 +1,24 @@
+[global_hosts]
+${BDD_VM_NAME} ansible_host=${BDD_PUBLIC_IP}
+${MONITORING_VM_NAME} ansible_host=${MONITORING_PUBLIC_IP}
+${APPLICATION_VM_NAME} ansible_host=${APPLICATION_PUBLIC_IP}
+
+[bdd_hosts]
+${BDD_VM_NAME} ansible_host=${BDD_PUBLIC_IP}
+
+[monitoring_hosts]
+${MONITORING_VM_NAME} ansible_host=${MONITORING_PUBLIC_IP}
+
+[application_hosts]
+${APPLICATION_VM_NAME} ansible_host=${APPLICATION_PUBLIC_IP}
+
+[all:vars]
+ansible_user=${ANSIBLE_USER}
+docker_user='DockerUser'
+watchtower_user='WatchtowerUser'
+prometheus_user='PrometheusUser'
+grafana_user='GrafanaUser'
+mysql_user='MySQLUser'
+ansible_ssh_private_key_file=~/.ssh/id_rsa
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+roles_path = ./roles

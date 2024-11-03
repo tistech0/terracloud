@@ -1,0 +1,7 @@
+---
+- hosts: monitoring_hosts
+  become: yes
+  roles:
+    - role: grafana
+      vars:
+        grafana_admin_user: "{{ grafana_user }}"

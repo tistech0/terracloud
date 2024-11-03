@@ -1,0 +1,30 @@
+---
+- name: Download Prometheus
+  get_url:
+    url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+    dest: "{{ prometheus_temp_path }}/prometheus-{{ prometheus_version }}.tar.gz"
+    mode: '0644'
+
+- name: Extract Prometheus
+  unarchive:
+    src: "{{ prometheus_temp_path }}/prometheus-{{ prometheus_version }}.tar.gz"
+    dest: "{{ prometheus_temp_path }}"
+    remote_src: yes
+    creates: "{{ prometheus_temp_path }}/prometheus-{{ prometheus_version }}.linux-amd64"
+
+- name: Install Prometheus binaries
+  copy:
+    src: "{{ prometheus_temp_path }}/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    dest: "{{ prometheus_binary_path }}/{{ item }}"
+    mode: '0755'
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    remote_src: yes
+  loop:
+    - prometheus
+    - promtool
+
+- name: Clean up temporary files
+  file:
+    path: "{{ prometheus_temp_path }}"
+    state: absent

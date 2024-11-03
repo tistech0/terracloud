@@ -1,0 +1,27 @@
+[Unit]
+Description=Node Exporter
+Documentation=https://github.com/prometheus/node_exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User={{ node_exporter_user }}
+Group={{ node_exporter_group }}
+Type=simple
+ExecStart={{ prometheus_binary_path }}/node_exporter \
+    --web.listen-address=:{{ node_exporter_port }}
+
+Restart=always
+RestartSec=10
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+PrivateTmp=yes
+CapabilityBoundingSet=
+LimitNOFILE=65535
+LimitNPROC=1024
+RuntimeDirectory=node_exporter
+RuntimeDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target

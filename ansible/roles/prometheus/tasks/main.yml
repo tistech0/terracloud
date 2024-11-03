@@ -1,0 +1,137 @@
+---
+- name: Verify required variables are defined
+  assert:
+    that:
+      - prometheus_user is defined
+      - prometheus_version is defined
+      - node_exporter_version is defined
+    msg: "Required variables must be defined"
+
+# Users and Groups Setup
+- name: Setup System Users and Groups
+  block:
+    - name: Create system groups
+      group:
+        name: "{{ item }}"
+        system: yes
+        state: present
+      loop:
+        - "{{ prometheus_group }}"
+        - "{{ node_exporter_group }}"
+
+    - name: Create system users
+      user:
+        name: "{{ item.user }}"
+        system: yes
+        group: "{{ item.group }}"
+        create_home: no
+        shell: /sbin/nologin
+      loop:
+        - { user: "{{ prometheus_user }}", group: "{{ prometheus_group }}" }
+        - { user: "{{ node_exporter_user }}", group: "{{ node_exporter_group }}" }
+  tags:
+    - prometheus_users
+
+# Directory Setup
+- name: Create Required Directories
+  block:
+    - name: Ensure Prometheus directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ prometheus_user }}"
+        group: "{{ prometheus_group }}"
+        mode: '0755'
+      loop:
+        - "{{ prometheus_config_path }}"
+        - "{{ prometheus_data_path }}"
+        - "{{ prometheus_temp_path }}"
+  tags:
+    - prometheus_dirs
+
+# Installation Block
+- name: Install Prometheus Components
+  block:
+    - name: Download and Install Prometheus
+      include_tasks: install_prometheus.yml
+
+    - name: Install Node Exporter
+      include_tasks: install_node_exporter.yml
+  tags:
+    - prometheus_install
+
+# Configuration Block
+- name: Configure Prometheus Stack
+  block:
+    - name: Setup Prometheus Configuration
+      template:
+        src: prometheus.yml.j2
+        dest: "{{ prometheus_config_path }}/prometheus.yml"
+        owner: "{{ prometheus_user }}"
+        group: "{{ prometheus_group }}"
+        mode: '0644'
+      notify: Restart Prometheus
+
+    - name: Setup Systemd Services
+      template:
+        src: "{{ item.src }}"
+        dest: "/etc/systemd/system/{{ item.dest }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - { src: 'prometheus.service.j2', dest: 'prometheus.service' }
+        - { src: 'node_exporter.service.j2', dest: 'node_exporter.service' }
+      notify: 
+        - Restart Prometheus
+        - Restart Node Exporter
+  tags:
+    - prometheus_config
+
+# Security Block
+- name: Configure Security
+  block:
+    - name: Setup UFW Rules
+      ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        from_ip: "{{ item.from_ip | default(omit) }}"
+      loop: "{{ prometheus_ufw_rules }}"
+  tags:
+    - prometheus_security
+
+# Service Management
+- name: Manage Services
+  block:
+    - name: Ensure services are running
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      loop:
+        - prometheus
+        - node_exporter
+  tags:
+    - prometheus_service
+
+- name: Verify Installation
+  block:
+    - name: Check Prometheus version
+      command: prometheus --version
+      register: prometheus_version_check
+      changed_when: false
+
+    - name: Check Node Exporter version
+      command: node_exporter --version
+      register: node_exporter_version_check
+      changed_when: false
+
+    - name: Display versions
+      debug:
+        msg: 
+          - "Prometheus version: {{ prometheus_version_check.stdout_lines[0] }}"
+          - "Node Exporter version: {{ node_exporter_version_check.stdout_lines[0] }}"
+  tags:
+    - prometheus_verify

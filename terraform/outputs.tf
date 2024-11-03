@@ -1,32 +1,32 @@
 output "vm_names" {
   value = [
     module.bdd.vm_name,
-    module.back.vm_name,
-    module.front.vm_name
+    module.monitoring.vm_name,
+    module.application.vm_name
   ]
 }
 
 output "vm_fqdns" {
   value = [
     module.bdd.vm_fqdn,
-    module.back.vm_fqdn,
-    module.front.vm_fqdn
+    module.monitoring.vm_fqdn,
+    module.application.vm_fqdn
   ]
 }
 
 output "vm_unique_identifiers" {
   value = [
     module.bdd.vm_unique_identifier,
-    module.back.vm_unique_identifier,
-    module.front.vm_unique_identifier
+    module.monitoring.vm_unique_identifier,
+    module.application.vm_unique_identifier
   ]
 }
 
 output "vm_ids" {
   value = [
     module.bdd.vm_id,
-    module.back.vm_id,
-    module.front.vm_id
+    module.monitoring.vm_id,
+    module.application.vm_id
   ]
 }
 

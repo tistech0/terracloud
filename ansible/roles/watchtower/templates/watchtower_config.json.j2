@@ -1,0 +1,40 @@
+{
+  "http_api": {
+    "metrics": {
+      "enabled": true,
+      "port": {{ watchtower_metrics_port }}
+    }
+  },
+  "notifications": {
+    "level": "{{ watchtower_log_level }}",
+    "template": "{% raw %}{{ .Message }}{% endraw %}",
+    {% if notifications.slack.enabled %}
+    "slack": {
+      "hook_url": "{{ notifications.slack.hook_url }}",
+      "identifier": "{{ notifications.slack.identifier }}"
+    },
+    {% endif %}
+    {% if notifications.email.enabled %}
+    "email": {
+      "server": "{{ notifications.email.server }}",
+      "from": "{{ notifications.email.from }}",
+      "to": "{{ notifications.email.to }}"
+    }
+    {% endif %}
+  },
+  "cleanup": {{ watchtower_cleanup | lower }},
+  "include_stopped": {{ watchtower_include_stopped | lower }},
+  "remove_volumes": {{ watchtower_remove_volumes | lower }},
+  "schedule": "0 */{{ watchtower_interval // 60 }} * * * *",
+  "monitor_only": {{ watchtower_monitor_only | lower }},
+  "log_level": "{{ watchtower_log_level }}",
+  "scope": {
+    "include": [
+      "{{ watched_repo }}"
+    ]
+  },
+  "stop_timeout": "{{ watchtower_stop_timeout }}",
+  "docker": {
+    "api_version": "{{ docker_api_version }}"
+  }
+}
