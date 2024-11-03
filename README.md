@@ -122,6 +122,9 @@ La partie Ansible du projet est responsable de la configuration des machines vir
 - `install_prometheus.yml` : Installe Prometheus sur les serveurs de surveillance
 - `install_grafana.yml` : Installe Grafana sur les serveurs de surveillance
 
+### Creer le vault
+cd ansible && ansible-vault create group_vars/all/vault.yml
+
 ## Exécution du Projet
 
 Pour déployer l'infrastructure et configurer les machines virtuelles, suivez ces étapes :
