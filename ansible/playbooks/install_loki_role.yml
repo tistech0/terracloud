@@ -1,0 +1,97 @@
+---
+- name: Déployer Loki dans un container Docker
+  hosts: monitoring_hosts
+  become: true
+  vars:
+    loki_container_name: "loki"
+    loki_docker_image: "grafana/loki:latest"
+    loki_config_dir: "/etc/loki"
+    loki_data_dir: "/opt/loki"
+
+  tasks:
+    - name: Créer les répertoires nécessaires pour Loki
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+        owner: "10001"
+        group: "10001"
+      loop:
+        - "{{ loki_data_dir }}/chunks"
+        - "{{ loki_data_dir }}/index"
+        - "{{ loki_data_dir }}/wal"
+        - "{{ loki_config_dir }}"
+
+    - name: Créer la configuration Loki
+      ansible.builtin.copy:
+        dest: "{{ loki_config_dir }}/config.yml"
+        content: |
+          auth_enabled: false
+
+          server:
+            http_listen_port: 3100
+
+          ingester:
+            lifecycler:
+              address: 127.0.0.1
+              ring:
+                kvstore:
+                  store: inmemory
+                replication_factor: 1
+              final_sleep: 0s
+            chunk_idle_period: 5m
+            chunk_retain_period: 30s
+            wal:
+              enabled: true
+              dir: /opt/loki/wal
+
+          schema_config:
+            configs:
+            - from: 2020-01-01
+              store: boltdb
+              object_store: filesystem
+              schema: v11
+              index:
+                prefix: index_
+                period: 24h
+
+          storage_config:
+            boltdb:
+              directory: /opt/loki/index
+            filesystem:
+              directory: /opt/loki/chunks
+
+    - name: Supprimer le container Loki existant et les données
+      ignore_errors: yes
+      block:
+        - name: Arrêter et supprimer le container
+          community.docker.docker_container:
+            name: "{{ loki_container_name }}"
+            state: absent
+            force_kill: yes
+
+        - name: Nettoyer les données
+          file:
+            path: "{{ loki_data_dir }}"
+            state: absent
+
+    - name: Recréer le répertoire de données
+      file:
+        path: "{{ loki_data_dir }}"
+        state: directory
+        owner: "10001"
+        group: "10001"
+        mode: "0755"
+
+    - name: Démarrer le container Loki
+      community.docker.docker_container:
+        name: "{{ loki_container_name }}"
+        image: "{{ loki_docker_image }}"
+        state: started
+        restart_policy: always
+        command: "-config.file=/etc/loki/config.yml -validation.allow-structured-metadata=false"
+        ports:
+          - "3100:3100"
+        volumes:
+          - "{{ loki_config_dir }}:/etc/loki"
+          - "{{ loki_data_dir }}:/opt/loki"

@@ -1,0 +1,73 @@
+---
+- name: Déployer Promtail dans un container Docker sur chaque VM
+  hosts: global_hosts
+  become: true
+  vars:
+    promtail_container_name: "promtail"
+    promtail_docker_image: "grafana/promtail:latest"
+    promtail_config_dir: "/etc/promtail"
+    promtail_port: 9080
+    monitoring_host: "{{ hostvars[groups['monitoring_hosts'][0]]['ansible_host'] }}"
+
+  tasks:
+    - name: Créer le répertoire de configuration pour Promtail
+      ansible.builtin.file:
+        path: "{{ promtail_config_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Créer la configuration Promtail
+      ansible.builtin.copy:
+        dest: "{{ promtail_config_dir }}/config.yml"
+        content: |
+          server:
+            http_listen_port: {{ promtail_port }}
+
+          positions:
+            filename: /tmp/positions.yaml
+
+          clients:
+            - url: http://{{ monitoring_host }}:3100/loki/api/v1/push
+              tenant_id: default
+
+          scrape_configs:
+            - job_name: docker
+              docker_sd_configs:
+                - host: unix:///var/run/docker.sock
+                  refresh_interval: 5s
+              pipeline_stages:
+                - docker: {}
+              relabel_configs:
+                - source_labels: ['__meta_docker_container_name']
+                  target_label: 'container'
+                - source_labels: ['__meta_docker_container_log_stream']
+                  target_label: 'stream'
+
+            - job_name: system
+              static_configs:
+                - targets:
+                    - localhost
+                  labels:
+                    job: varlogs
+                    host: "{{ inventory_hostname }}"
+                    __path__: /var/log/*log
+
+    - name: Supprimer un ancien container Promtail s'il existe
+      community.docker.docker_container:
+        name: "{{ promtail_container_name }}"
+        state: absent
+
+    - name: Démarrer le container Promtail
+      community.docker.docker_container:
+        name: "{{ promtail_container_name }}"
+        image: "{{ promtail_docker_image }}"
+        state: started
+        restart_policy: always
+        volumes:
+          - "{{ promtail_config_dir }}:/etc/promtail"
+          - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
+          - "/var/run/docker.sock:/var/run/docker.sock"
+          - "/var/log:/var/log:ro"
+        command: "-config.file=/etc/promtail/config.yml"
+        ports:
+          - "{{ promtail_port }}:9080"

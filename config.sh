@@ -15,9 +15,13 @@ export INVENTORY_FILE="${ANSIBLE_DIR}/inventory.ini"
 export PLAYBOOKS=(
     "install_docker_role.yml"
     "install_mysql_role.yml"
-    "install_prometheus_role.yml"
-    "install_grafana_role.yml"
     "install_watchtower_role.yml"
+    "install_loki_role.yml"
+    "install_promtail_role.yml"
+    "install_nodeExporter_role.yml"
+    "install_cAdvisor_role.yml"
+    "install_prometheusFederation_role.yml"
+    "install_grafana_role.yml"
 )
 
 # Timeout settings (en secondes)

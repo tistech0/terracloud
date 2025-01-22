@@ -20,6 +20,8 @@ fi
 # Install required collections
 log "INFO" "Installing required Ansible collections"
 ansible-galaxy collection install community.grafana
+ansible-galaxy install geerlingguy.docker
+ansible-galaxy collection install community.docker
 
 # Handle vault password
 log "INFO" "Setting up Ansible vault"

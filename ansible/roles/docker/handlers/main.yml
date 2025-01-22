@@ -1,6 +1,0 @@
-# Dans handlers/main.yml :
-- name: Restart Docker
-  service:
-    name: docker
-    state: restarted
-  when: docker_restart_handler_enabled | default(true)

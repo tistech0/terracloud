@@ -1,7 +1,0 @@
-- job_name: watchtower
-  scrape_interval: {{ metrics_scrape_interval }}
-  static_configs:
-    - targets:
-      - "localhost:{{ watchtower_metrics_port }}"
-  metrics_path: /metrics
-  scheme: http
