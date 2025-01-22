@@ -1,0 +1,63 @@
+---
+- name: Déployer et configurer Prometheus pour la fédération
+  hosts: monitoring_hosts
+  become: true
+  vars:
+    prometheus_container_name: "prometheus"
+    prometheus_config_dir: "/etc/prometheus"
+    prometheus_docker_image: "prom/prometheus:latest"
+
+  tasks:
+    - name: Vérifier les groupes et les cibles de fédération
+      debug:
+        msg: |
+          Groupes bdd_hosts: {{ groups['bdd_hosts'] }}
+          Groupes application_hosts: {{ groups['application_hosts'] }}
+
+    - name: Construire la liste des cibles de fédération
+      ansible.builtin.set_fact:
+        prometheus_federation_targets: >-
+          {{
+            (groups['bdd_hosts'] + groups['application_hosts'])
+            | map('extract', hostvars, 'ansible_host')
+            | list + ['localhost']
+          }}
+
+    - name: Afficher les cibles de fédération
+      debug:
+        var: prometheus_federation_targets
+
+    - name: Créer le répertoire de configuration de Prometheus
+      ansible.builtin.file:
+        path: "{{ prometheus_config_dir }}"
+        state: directory
+        owner: "root"
+        group: "root"
+        mode: "0755"
+
+    - name: Générer le fichier de configuration Prometheus
+      ansible.builtin.template:
+        src: prometheus.yml.j2
+        dest: "{{ prometheus_config_dir }}/prometheus.yml"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+
+    - name: Démarrer le container Prometheus
+      community.docker.docker_container:
+        name: "{{ prometheus_container_name }}"
+        image: "{{ prometheus_docker_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "9090:9090"
+        volumes:
+          - "{{ prometheus_config_dir }}:/etc/prometheus"
+        command: "--config.file=/etc/prometheus/prometheus.yml"
+
+    - name: Vérifier que Prometheus est en cours d'exécution
+      ansible.builtin.command: docker ps -f "name={{ prometheus_container_name }}"
+      register: prometheus_status
+
+    - debug:
+        var: prometheus_status.stdout

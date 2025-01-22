@@ -195,10 +195,10 @@ configure_environment() {
         return 1
     fi
     
-    if ! verify_ansible_roles || ! verify_ansible_playbooks; then
-        log "ERROR" "Missing required Ansible files"
-        return 1
-    fi
+    # if ! verify_ansible_roles || ! verify_ansible_playbooks; then
+    #     log "ERROR" "Missing required Ansible files"
+    #     return 1
+    # fi
     
     chmod +x "$ANSIBLE_DIR/apply_ansible.sh"
     if ! (cd "$ANSIBLE_DIR" && ./apply_ansible.sh); then

@@ -1,8 +1,91 @@
 ---
 - hosts: application_hosts
   become: yes
-  roles:
-    - role: watchtower
-      vars:
-        watchtower_interval: 30
-        watched_repo: "tistech0/countersepitechapp:latest"
+  vars:
+    db_connection: "mysql"
+    db_host: "{{ hostvars['ubuntu-vm-nts-0-bdd']['ansible_host'] }}"
+    db_port: "3306"
+    db_database: "db_countersepitechapp"
+    db_username: "root"
+    db_password: "{{ mysql_root_password }}"
+    dockerize_version: "v0.9.1"
+  tasks:
+    - name: Installez PHP et Composer
+      apt:
+        name:
+          - php
+          - php-mysql
+          - composer
+        state: present
+
+    - name: Assurez-vous que le service Apache est arrêté
+      ansible.builtin.service:
+        name: apache2
+        state: stopped
+        enabled: no
+
+    - name: Assurez-vous que le conteneur est arrêté s'il existe
+      community.docker.docker_container:
+        name: countersepitechapp
+        state: absent
+
+    - name: Déployer et démarrer l'application Laravel
+      community.docker.docker_container:
+        name: countersepitechapp
+        image: tistech0/countersepitechapp:latest
+        state: started
+        ports:
+          - "80:80"
+        env:
+          DB_CONNECTION: "{{ db_connection }}"
+          DB_HOST: "{{ db_host }}"
+          DB_PORT: "{{ db_port }}"
+          DB_DATABASE: "{{ db_database }}"
+          DB_USERNAME: "{{ db_username }}"
+          DB_PASSWORD: "{{ db_password }}"
+        restart_policy: always
+
+    - name: Attendez que le conteneur soit opérationnel
+      wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 80
+        timeout: 30
+
+    - name: Créer la configuration Apache pour Laravel dans le conteneur
+      shell: |
+        docker exec countersepitechapp bash -c "
+        echo '
+        <VirtualHost *:80>
+            ServerName example.com
+            DocumentRoot /var/www/html/public
+
+            <Directory /var/www/html/public>
+                Options Indexes FollowSymLinks
+                AllowOverride All
+                Require all granted
+            </Directory>
+
+            ErrorLog /var/log/apache2/error.log
+            CustomLog /var/log/apache2/access.log combined
+        </VirtualHost>' > /etc/apache2/sites-available/laravel.conf &&
+        a2ensite laravel.conf &&
+        a2enmod rewrite"
+
+    - name: Exécutez les migrations Laravel
+      command: >
+        docker exec countersepitechapp php artisan migrate --force
+      register: migration_result
+      changed_when: "'Migrating:' in migration_result.stdout"
+
+    - debug:
+        msg: "Migrations exécutées avec succès : {{ migration_result.stdout }}"
+
+    - name: Nettoyer le cache Laravel et configurer le cache
+      shell: |
+        docker exec countersepitechapp php artisan cache:clear &&
+        docker exec countersepitechapp php artisan config:clear &&
+        docker exec countersepitechapp php artisan config:cache &&
+        docker exec countersepitechapp php artisan route:cache
+
+    - name: Redémarrer le conteneur Docker pour appliquer les modifications
+      shell: docker restart countersepitechapp

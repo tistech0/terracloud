@@ -1,7 +1,304 @@
 ---
-- hosts: monitoring_hosts
-  become: yes
-  roles:
-    - role: grafana
-      vars:
-        grafana_admin_user: "{{ grafana_user }}"
+- name: Installer et configurer Grafana via Docker
+  hosts: monitoring_hosts
+  become: true
+  vars:
+    grafana_container_name: "grafana"
+    grafana_data_dir: "/var/lib/grafana"
+    grafana_docker_image: "grafana/grafana:latest"
+    grafana_admin_user: "admin"
+    grafana_default_password: "admin"  # Par défaut à la création initiale
+    grafana_admin_password: "{{ vault_grafana_admin_password }}"  # Stocké dans Ansible Vault
+    grafana_datasource_name: "Prometheus"
+    node_exporter_dashboard_url: "https://grafana.com/api/dashboards/1860/revisions/28/download"
+    node_exporter_dashboard_file: "/tmp/node_exporter_dashboard.json"
+    prometheus_url: "http://{{ hostvars[inventory_hostname]['ansible_host'] }}:9090"  # URL Prometheus
+
+  tasks:
+    - name: Créer le répertoire de données pour Grafana
+      ansible.builtin.file:
+        path: "{{ grafana_data_dir }}"
+        state: directory
+        mode: "0755"
+        owner: "472"
+        group: "472"
+
+    - name: Télécharger et lancer le container Grafana
+      community.docker.docker_container:
+        name: "{{ grafana_container_name }}"
+        image: "{{ grafana_docker_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "3000:3000"
+        volumes:
+          - "{{ grafana_data_dir }}:/var/lib/grafana"
+        env:
+          GF_SECURITY_ADMIN_USER: "{{ grafana_admin_user }}"
+          GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_default_password }}"
+
+    - name: Attendre que Grafana soit disponible
+      ansible.builtin.wait_for:
+        host: "localhost"
+        port: 3000
+        timeout: 120
+
+    - name: Pause de 2 minutes pour garantir le démarrage complet de Grafana
+      ansible.builtin.pause:
+        minutes: 1
+
+    - name: Encoder les identifiants Grafana actuels (défaut)
+      ansible.builtin.set_fact:
+        grafana_default_auth: "{{ (grafana_admin_user + ':' + grafana_default_password) | b64encode }}"
+
+    - name: Changer le mot de passe de l'administrateur avec curl (mode debug)
+      ansible.builtin.command: >
+        curl -v -X PUT -H "Content-Type: application/json"
+        -H "Authorization: Basic {{ grafana_default_auth }}"
+        -d '{"password":"{{ grafana_admin_password }}"}'
+        http://localhost:3000/api/admin/users/1/password
+      register: change_password_response
+
+    - debug:
+        var: change_password_response
+
+    - name: Encoder les identifiants Grafana mis à jour
+      ansible.builtin.set_fact:
+        grafana_auth: "{{ (grafana_admin_user + ':' + grafana_admin_password) | b64encode }}"
+
+    - name: Ajouter la source de données Prometheus à Grafana
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/datasources"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Basic {{ grafana_auth }}"
+        body: |
+          {
+            "name": "{{ grafana_datasource_name }}",
+            "type": "prometheus",
+            "url": "{{ prometheus_url }}",
+            "access": "proxy",
+            "basicAuth": false
+          }
+        body_format: json
+        status_code: [200, 409]
+
+    - name: Télécharger le dashboard Node Exporter depuis Grafana.com
+      ansible.builtin.get_url:
+        url: "{{ node_exporter_dashboard_url }}"
+        dest: "{{ node_exporter_dashboard_file }}"
+        mode: "0644"
+
+    - name: Lire le contenu du fichier Node Exporter JSON
+      ansible.builtin.slurp:
+        src: "{{ node_exporter_dashboard_file }}"
+      register: node_exporter_dashboard
+
+    - name: Importer le dashboard Node Exporter dans Grafana
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/dashboards/import"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Basic {{ grafana_auth }}"
+        body: |
+          {
+            "dashboard": {{ node_exporter_dashboard['content'] | b64decode }},
+            "overwrite": true,
+            "inputs": [
+              {
+                "name": "DS_PROMETHEUS",
+                "type": "datasource",
+                "pluginId": "prometheus",
+                "value": "{{ grafana_datasource_name }}"
+              }
+            ]
+          }
+        body_format: json
+        status_code: 200
+
+    - name: Définir l'URL du dashboard cAdvisor
+      ansible.builtin.set_fact:
+        cadvisor_dashboard_url: "https://grafana.com/api/dashboards/14282/revisions/1/download"
+        cadvisor_dashboard_file: "/tmp/cadvisor_dashboard.json"
+
+    - name: Télécharger le dashboard cAdvisor depuis Grafana.com
+      ansible.builtin.get_url:
+        url: "{{ cadvisor_dashboard_url }}"
+        dest: "{{ cadvisor_dashboard_file }}"
+        mode: "0644"
+
+    - name: Lire le contenu du fichier cAdvisor JSON
+      ansible.builtin.slurp:
+        src: "{{ cadvisor_dashboard_file }}"
+      register: cadvisor_dashboard
+
+    - name: Importer le dashboard cAdvisor dans Grafana
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/dashboards/import"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Basic {{ grafana_auth }}"
+        body: |
+          {
+            "dashboard": {{ cadvisor_dashboard['content'] | b64decode }},
+            "overwrite": true,
+            "inputs": [
+              {
+                "name": "DS_PROMETHEUS",
+                "type": "datasource",
+                "pluginId": "prometheus",
+                "value": "{{ grafana_datasource_name }}"
+              }
+            ]
+          }
+        body_format: json
+        status_code: 200
+
+    - name: Ajouter la source de données Loki à Grafana
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/datasources"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Basic {{ grafana_auth }}"
+        body: |
+          {
+            "name": "Loki",
+            "type": "loki",
+            "url": "http://{{ hostvars[inventory_hostname]['ansible_host'] }}:3100",
+            "access": "proxy",
+            "basicAuth": false
+          }
+        body_format: json
+        status_code: [ 200, 409 ]
+
+    - name: Créer le dashboard Loki dans Grafana
+      uri:
+        url: "http://localhost:3000/api/dashboards/db"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Basic {{ grafana_auth }}"
+        body: |
+          {
+            "dashboard": {
+              "title": "Logs Monitoring Dashboard",
+              "panels": [
+                {
+                  "title": "Logs Volume par Host",
+                  "type": "timeseries",
+                  "datasource": {
+                    "type": "loki",
+                    "uid": "Loki"
+                  },
+                  "targets": [
+                    {
+                      "expr": "sum(count_over_time({job=\"varlogs\"}[5m])) by (host)",
+                      "refId": "A"
+                    }
+                  ],
+                  "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 0,
+                    "y": 0
+                  }
+                },
+                {
+                  "title": "Erreurs Système",
+                  "type": "logs",
+                  "datasource": {
+                    "type": "loki",
+                    "uid": "Loki"
+                  },
+                  "targets": [
+                    {
+                      "expr": "{job=\"varlogs\"} |= \"error\"",
+                      "refId": "A"
+                    }
+                  ],
+                  "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 12,
+                    "y": 0
+                  }
+                },
+                {
+                  "title": "Logs Docker",
+                  "type": "logs",
+                  "datasource": {
+                    "type": "loki",
+                      "uid": "Loki"
+                    },
+                    "targets": [
+                      {
+                        "expr": "{job=\"docker\"}",
+                        "refId": "A"
+                      }
+                    ],
+                    "gridPos": {
+                      "h": 8,
+                      "w": 12,
+                      "x": 0,
+                      "y": 8
+                    }
+                  },
+                  {
+                    "title": "Activité Systemd",
+                    "type": "logs",
+                    "datasource": {
+                      "type": "loki",
+                      "uid": "Loki"
+                    },
+                    "targets": [
+                      {
+                        "expr": "{job=\"varlogs\"} |= \"systemd\"",
+                        "refId": "A"
+                      }
+                    ],
+                    "gridPos": {
+                      "h": 8,
+                      "w": 12,
+                      "x": 12,
+                      "y": 8
+                    }
+                  },
+                  {
+                    "title": "Activité SSH",
+                    "type": "logs",
+                    "datasource": {
+                      "type": "loki",
+                      "uid": "Loki"
+                    },
+                    "targets": [
+                      {
+                        "expr": "{job=\"varlogs\"} |= \"sshd\"",
+                        "refId": "A"
+                      }
+                    ],
+                    "gridPos": {
+                      "h": 8,
+                      "w": 24,
+                      "x": 0,
+                      "y": 16
+                    }
+                  }
+                ],
+                "refresh": "5s",
+                "schemaVersion": 36,
+                "time": {
+                  "from": "now-1h",
+                  "to": "now"
+                },
+                "timepicker": {},
+                "timezone": "browser"
+              },
+              "folderId": 0,
+              "overwrite": true
+            }
+          body_format: json
+          status_code: [200]

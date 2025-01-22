@@ -1,0 +1,35 @@
+---
+- name: Déployer cAdvisor dans un container Docker sur chaque VM
+  hosts: global_hosts
+  become: true
+  vars:
+    cadvisor_container_name: "cadvisor"
+    cadvisor_docker_image: "gcr.io/cadvisor/cadvisor:latest"
+    cadvisor_port: 8081
+
+  tasks:
+    - name: Supprimer un ancien container cAdvisor s'il existe
+      community.docker.docker_container:
+        name: "{{ cadvisor_container_name }}"
+        state: absent
+
+    - name: Démarrer le container cAdvisor
+      community.docker.docker_container:
+        name: "{{ cadvisor_container_name }}"
+        image: "{{ cadvisor_docker_image }}"
+        state: started
+        restart_policy: always
+        volumes:
+          - "/:/rootfs:ro"
+          - "/var/run:/var/run:rw"
+          - "/sys:/sys:ro"
+          - "/var/lib/docker/:/var/lib/docker:ro"
+        ports:
+          - "{{ cadvisor_port }}:8080"
+
+    - name: Vérifier que cAdvisor est en cours d'exécution
+      ansible.builtin.command: docker ps -f "name={{ cadvisor_container_name }}"
+      register: cadvisor_status
+
+    - debug:
+        var: cadvisor_status.stdout

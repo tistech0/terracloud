@@ -1,0 +1,30 @@
+---
+- name: Déployer Node Exporter dans un container Docker sur chaque VM
+  hosts: global_hosts
+  become: true
+  vars:
+    node_exporter_container_name: "node_exporter"
+    node_exporter_docker_image: "prom/node-exporter:latest"
+    node_exporter_port: 9100
+
+  tasks:
+    - name: Supprimer un ancien container Node Exporter s'il existe
+      community.docker.docker_container:
+        name: "{{ node_exporter_container_name }}"
+        state: absent
+
+    - name: Démarrer le container Node Exporter
+      community.docker.docker_container:
+        name: "{{ node_exporter_container_name }}"
+        image: "{{ node_exporter_docker_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "{{ node_exporter_port }}:9100"
+
+    - name: Vérifier que Node Exporter est en cours d'exécution
+      ansible.builtin.command: docker ps -f "name={{ node_exporter_container_name }}"
+      register: node_exporter_status
+
+    - debug:
+        var: node_exporter_status.stdout

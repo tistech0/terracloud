@@ -1,0 +1,10 @@
+docker_users:
+  - dockeruser  # Nom de l'utilisateur à ajouter au groupe Docker
+
+docker_apt_release_channel: "stable"
+docker_apt_arch: "amd64"
+docker_apt_repo: "https://download.docker.com/linux/ubuntu"
+docker_apt_key_url: "https://download.docker.com/linux/ubuntu/gpg"
+
+docker_install_compose: true  # Installe Docker Compose
+docker_compose_version: "v2.2.3"  # Version spécifique de Docker Compose
